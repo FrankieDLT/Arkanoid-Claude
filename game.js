@@ -38,6 +38,12 @@ const SKIN_ORDER = [ 'retro', 'pastel', 'neon' ];
 const STORAGE = {
   highScore: 'arkanoid:v1:highscore', // stored as a decimal integer string
 };
+const PAUSE_MENU = {
+  minLevel: 1,
+  maxLevel: 99,
+  minus: { x: W / 2 - 100, y: 330, w: 40, h: 40 }, // click targets, canvas space
+  plus: { x: W / 2 + 60, y: 330, w: 40, h: 40 },
+};
 const MAX_STEP = 8; // px; max distance a ball moves per collision sub-step
 const MAX_BOUNCE_ANGLE = 60 * Math.PI / 180; // from vertical, at paddle edges
 const START_LIVES = 3, POINTS_PER_BRICK = 10;
@@ -45,6 +51,7 @@ const START_LIVES = 3, POINTS_PER_BRICK = 10;
 // Mutable state
 const state = {
   mode: 'ready', // 'ready' | 'playing' | 'gameover'
+  paused: false, // overlay flag, independent of mode; freezes update()
   score: 0,
   lives: START_LIVES,
   level: 1,
@@ -211,16 +218,43 @@ function setKey( e, down ) {
       e.preventDefault();
       if ( down && !e.repeat ) action();
       break;
+    case 'KeyP':
+      if ( down && !e.repeat && state.mode !== 'gameover' ) state.paused = !state.paused;
+      break;
   }
 }
 
-// Space or click: launches the ball when ready, restarts after game over
+// Space or click: launches the ball when ready, restarts after game over; ignored while paused
 function action() {
+  if ( state.paused ) return;
   if ( state.mode === 'ready' ) launchBall();
   else if ( state.mode === 'gameover' ) resetGame();
 }
 
-canvas.addEventListener( 'mousedown', action );
+// Pause menu level select: restarts the wall at the chosen level, keeping score and lives
+function setLevel( level ) {
+  level = Math.max( PAUSE_MENU.minLevel, Math.min( PAUSE_MENU.maxLevel, level ) );
+  if ( level === state.level ) return;
+  state.level = level;
+  resetEffects();
+  state.bricks = createBricks( state.level );
+  state.explosions = [];
+  state.mode = 'ready';
+  stickBallToPaddle();
+}
+
+function inRect( x, y, r ) {
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
+canvas.addEventListener( 'mousedown', ( e ) => {
+  if ( !state.paused ) return action();
+  const rect = canvas.getBoundingClientRect();
+  const x = ( e.clientX - rect.left ) * ( W / rect.width );
+  const y = ( e.clientY - rect.top ) * ( H / rect.height );
+  if ( inRect( x, y, PAUSE_MENU.minus ) ) setLevel( state.level - 1 );
+  else if ( inRect( x, y, PAUSE_MENU.plus ) ) setLevel( state.level + 1 );
+} );
 
 window.addEventListener( 'keydown', ( e ) => setKey( e, true ) );
 window.addEventListener( 'keyup', ( e ) => setKey( e, false ) );
@@ -237,6 +271,7 @@ function clampPaddle() {
 let lastTime = 0;
 
 function update( dt ) {
+  if ( state.paused ) return;
   if ( mouseX !== null ) {
     state.paddle.x = mouseX - PADDLE.w / 2;
     mouseX = null; // keyboard takes over until the mouse moves again
@@ -285,6 +320,7 @@ function resetGame() {
   state.lives = START_LIVES;
   state.level = 1;
   state.newRecord = false;
+  state.paused = false;
   resetEffects();
   state.bricks = createBricks( state.level );
   state.mode = 'ready';
@@ -533,6 +569,8 @@ function render() {
     for ( const b of state.balls ) drawSprite( ctx, 'ball', b.x, b.y, BALL.size, BALL.size );
   }
 
+  if ( state.paused ) renderPauseMenu();
+
   if ( state.mode === 'gameover' ) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect( 0, 0, W, H );
@@ -560,6 +598,50 @@ function render() {
         W / 2 + ( i - ( SKIN_ORDER.length - 1 ) / 2 ) * gap, H / 2 + 172 );
     } );
   }
+}
+
+function renderPauseMenu() {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.fillRect( 0, 0, W, H );
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 40px sans-serif';
+  ctx.fillText( 'PAUSED', W / 2, 100 );
+
+  ctx.font = '20px sans-serif';
+  ctx.fillText( 'Lives', W / 2, 160 );
+  const ICON = 20, GAP = 6;
+  const iconsW = state.lives * ICON + Math.max( 0, state.lives - 1 ) * GAP;
+  for ( let i = 0; i < state.lives; i++ ) {
+    drawSprite( ctx, 'ball', W / 2 - iconsW / 2 + i * ( ICON + GAP ), 180, ICON, ICON );
+  }
+
+  ctx.fillText( 'Active power-ups', W / 2, 240 );
+  const active = [];
+  if ( state.effects.bar > 0 ) active.push( 'Bar ' + Math.ceil( state.effects.bar ) + 's' );
+  if ( state.effects.frenzy > 0 ) active.push( 'Frenzy ' + Math.ceil( state.effects.frenzy ) + 's' );
+  if ( state.balls.length > 1 ) active.push( 'Multiball x' + state.balls.length );
+  ctx.fillStyle = active.length ? '#ffd400' : '#aaa';
+  ctx.fillText( active.length ? active.join( '   ' ) : 'None', W / 2, 270 );
+
+  ctx.fillStyle = '#fff';
+  ctx.fillText( 'Level select', W / 2, 310 );
+  for ( const [ r, label ] of [ [ PAUSE_MENU.minus, '-' ], [ PAUSE_MENU.plus, '+' ] ] ) {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect( r.x, r.y, r.w, r.h );
+    ctx.font = 'bold 28px sans-serif';
+    ctx.fillText( label, r.x + r.w / 2, r.y + r.h / 2 + 1 );
+  }
+  ctx.font = 'bold 28px sans-serif';
+  ctx.fillText( String( state.level ), W / 2, PAUSE_MENU.minus.y + PAUSE_MENU.minus.h / 2 + 1 );
+
+  ctx.font = '16px sans-serif';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText( 'Changing level restarts the wall (score and lives kept)', W / 2, 395 );
+  ctx.fillText( 'Press P to resume', W / 2, 425 );
+  ctx.textBaseline = 'alphabetic';
 }
 
 function frame( now ) {
