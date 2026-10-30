@@ -258,8 +258,16 @@ function render() {
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   ctx.fillText( 'Score: ' + state.score, 16, BRICK.top / 2 );
+  // Lives: one ball icon per life, right-aligned, label to the left of the icons
+  const LIFE_ICON = 16, LIFE_GAP = 4;
+  const iconsW = state.lives * LIFE_ICON + Math.max( 0, state.lives - 1 ) * LIFE_GAP;
+  const iconsX = W - 16 - iconsW;
+  for ( let i = 0; i < state.lives; i++ ) {
+    drawSprite( ctx, 'ball', iconsX + i * ( LIFE_ICON + LIFE_GAP ),
+      BRICK.top / 2 - LIFE_ICON / 2, LIFE_ICON, LIFE_ICON );
+  }
   ctx.textAlign = 'right';
-  ctx.fillText( 'Lives: ' + state.lives, W - 16, BRICK.top / 2 );
+  ctx.fillText( 'Lives:', iconsX - ( state.lives > 0 ? 8 : 0 ), BRICK.top / 2 );
   ctx.textBaseline = 'alphabetic';
 
   if ( state.mode !== 'gameover' ) {
