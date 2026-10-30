@@ -16,9 +16,10 @@ Spec 02 adds, all in `game.js`:
 - **Speed:** `currentBallSpeed()` is the single source of ball speed (base speed, times `POWERUP.frenzyFactor` while Frenzy is active). Balls move in sub-steps of at most `MAX_STEP` px so they cannot tunnel.
 - **High score:** one integer in `localStorage` under `STORAGE.highScore`, accessed through `loadHighScore()` / `saveHighScore(n)` (try/catch, in-memory fallback) and written at game over.
 - **Power-ups:** destroyed bricks drop capsules with probability `POWERUP.dropChance` (mutable, e.g. set it to 1 in the console to test). Types: `triple` (splits the first ball into 3, max `POWERUP.maxBalls`), `bar` (full-width bar at `BAR.y`), `frenzy` (2x ball speed). Bar and Frenzy last 10 s of `playing` time and refresh when caught again. `resetEffects()` clears effects and capsules on life loss, level change, and new game.
+- **Pause menu** (added on branch `pauseLevelSelect`, no spec): `P` toggles `state.paused` (not on the game over screen). While paused, `update()` and `action()` do nothing and `renderPauseMenu()` draws a level selector; clicking its -/+ buttons (`PAUSE_MENU` hit boxes) calls `setLevel(n)` (clamped to 1-99), which regenerates the wall, calls `resetEffects()`, returns to `ready`, and keeps score and lives. `resetGame()` clears `paused`.
 - **Skins:** `SKINS` / `SKIN_ORDER` (Retro, Pastel, Neon) are picked on the game over screen with Left/Right (or A/D); Space or click starts the game. The skin is not persisted. Only the spritesheet is filtered; background, HUD text, and capsules are not.
 
-State additions: `state.balls` (replaces `state.ball`), `level`, `highScore`, `newRecord`, `capsules`, `effects { bar, frenzy }` (remaining seconds), `skin`.
+State additions: `state.balls` (replaces `state.ball`), `paused`, `level`, `highScore`, `newRecord`, `capsules`, `effects { bar, frenzy }` (remaining seconds), `skin`.
 
 ## Assets
 
@@ -28,12 +29,25 @@ State additions: `state.balls` (replaces `state.ball`), `level`, `highScore`, `n
 - Draw with `drawSprite(ctx, name, x, y, w, h)`, where block names are prefixed `block_` (for example `block_red`), or with `drawFrame(ctx, frame, x, y, w, h)` for explosion frames. Both silently do nothing until the sheet is loaded.
 - `EXPLOSION_FRAMES.gray` reuses the red frames. This may be a placeholder.
 - Sounds are in `assets/sounds/`: `ball-bounce.mp3` and `break-sound.mp3`.
-
 ## Spec-driven workflow
 
-Project skills in `.claude/skills/` define the workflow for features. Both are user-invoked only.
+Features are specified before they are coded. Project skills in `.claude/skills/` define the workflow; both are user-invoked only (`disable-model-invocation`).
 
-- `/spec <description>` asks clarifying questions, then writes `specs/NN-slug.md` in `Draft` state. It never writes code. A human changes the state to `Approved`.
-- `/spec-impl <NN-slug>` implements only `Approved` specs. It creates the branch `spec-NN-slug` (controlled by `AutoCreateBranch` in `specs/.spec-config.yml`) and implements one plan step at a time, pausing for diff review. It never commits on its own.
+- `/spec <description>` asks clarifying questions (scope, data, integration, persistence, UX, risks), then writes `specs/NN-slug.md` in `Draft` state, following `.claude/skills/spec/template.md`. It never writes code. A human changes the state to `Approved`. Replies and specs use the language of the prompt and of the existing specs.
+- `/spec-impl <NN-slug>` implements only `Approved` specs (the state label may be in any language). It creates the branch `spec-NN-slug` (controlled by `AutoCreateBranch` in `specs/.spec-config.yml`, currently `true`) and implements one step of the spec's implementation plan at a time, pausing for diff review. It never commits on its own.
+- `/neko` (`.claude/skills/neko/`) is an unrelated joke skill that answers like a cat.
 
-`specs/` holds `.spec-config.yml` (`AutoCreateBranch: true`), `01-playable-mvp.md` (Approved; all plan steps implemented on branch `spec-01-playable-mvp`, acceptance criteria pending verification), and `02-levels-powerups-skins-highscore.md` (Approved; all plan steps implemented on branch `spec-02-levels-powerups-skins-highscore`, acceptance criteria pending verification). `/neko` is also defined in `.claude/skills/neko/`.
+Spec layout: header (`Status`, `Depends on`, `Date`, `Objective`), then Why this spec exists, Scope, Data model, Implementation plan, Acceptance criteria, Decisions, Risks, and What is not in this spec. For new behavior, write or update a spec instead of diverging from it silently.
+
+Current specs in `specs/`:
+
+- `01-playable-mvp.md`: Approved; all plan steps implemented on branch `spec-01-playable-mvp`, acceptance criteria pending verification.
+- `02-levels-powerups-skins-highscore.md`: Approved; all plan steps implemented on branch `spec-02-levels-powerups-skins-highscore`, acceptance criteria pending verification.
+
+## Repository layout
+
+- `index.html`: canvas page; loads `assets/spritesheet.js`, then `game.js`.
+- `game.js`: all game logic (constants, `state`, update, render, input, audio).
+- `assets/`: spritesheet PNG, `spritesheet.js` frame table, `sounds/`.
+- `specs/`, `.claude/skills/`: spec-driven workflow.
+- `README.md`: run instructions and controls. It does not yet mention pause (`P`) or skins.
