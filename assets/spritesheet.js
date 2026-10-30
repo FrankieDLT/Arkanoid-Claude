@@ -24,7 +24,8 @@ const SPRITES = {
   }
 };
 
-let ssImg = null;
+let ssImg = null; // drawing source: the original sheet or a filtered copy of it
+let ssOriginal = null; // untouched sheet canvas, kept so skins always start from it
 let ssLoaded = false;
 const ssCallbacks = [];
 
@@ -40,12 +41,28 @@ function loadSpritesheet( cb ) {
     oc.height = rawImg.height;
     const octx = oc.getContext( '2d' );
     octx.drawImage( rawImg, 0, 0 );
+    ssOriginal = oc;
     ssImg = oc;
     ssLoaded = true;
     ssCallbacks.forEach( f => f() );
   };
   rawImg.onerror = () => console.error( 'Failed to load spritesheet' );
   rawImg.src = 'assets/spritesheet-breakout.png';
+}
+
+// Rebuilds the drawing source from the original sheet using a CSS filter string ('none' restores it).
+// Does nothing before the sheet is loaded or when ctx.filter is unsupported (stays on the current skin).
+function applySkin( filter ) {
+  if ( !ssLoaded ) return;
+  if ( filter === 'none' ) { ssImg = ssOriginal; return; }
+  const oc = document.createElement( 'canvas' );
+  oc.width = ssOriginal.width;
+  oc.height = ssOriginal.height;
+  const octx = oc.getContext( '2d' );
+  if ( !( 'filter' in octx ) ) return;
+  octx.filter = filter;
+  octx.drawImage( ssOriginal, 0, 0 );
+  ssImg = oc;
 }
 
 function drawFrame( ctx, frame, x, y, w, h ) {
